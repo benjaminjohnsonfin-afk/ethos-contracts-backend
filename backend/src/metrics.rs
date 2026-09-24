@@ -1,6 +1,10 @@
+use std::collections::HashMap;
 use std::fmt::Write as _;
 use std::sync::atomic::{AtomicI64, AtomicU64, Ordering};
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
+
+/// Default maximum number of distinct values allowed per metric label.
+pub const DEFAULT_LABEL_CARDINALITY_LIMIT: usize = 100;
 
 /// Shared metrics state for the Ethos-Protocol backend.
 #[derive(Default)]
@@ -23,7 +27,57 @@ pub struct Metrics {
 
 impl Metrics {
     pub fn new() -> Arc<Self> {
-        Arc::new(Self::default())
+        Arc::new(Self {
+            label_cardinality_limit: DEFAULT_LABEL_CARDINALITY_LIMIT,
+            ..Self::default()
+        })
+    }
+
+    /// Create a `Metrics` instance with a custom per-label cardinality limit.
+    pub fn with_label_cardinality_limit(limit: usize) -> Arc<Self> {
+        Arc::new(Self {
+            label_cardinality_limit: limit,
+            ..Self::default()
+        })
+    }
+
+    /// Register a label value for a metric label, enforcing the cardinality
+    /// limit. Returns `true` when the value is accepted, or `false` when it is
+    /// dropped because the label already reached its cardinality limit. A
+    /// warning is logged whenever a value is dropped.
+    pub fn register_label_value(&self, label: &str, value: &str) -> bool {
+        let mut labels = self
+            .label_values
+            .lock()
+            .expect("metrics label registry poisoned");
+        let values = labels.entry(label.to_string()).or_default();
+
+        if values.iter().any(|existing| existing == value) {
+            return true;
+        }
+
+        if values.len() >= self.label_cardinality_limit {
+            tracing::warn!(
+                label,
+                value,
+                limit = self.label_cardinality_limit,
+                "dropping metric label value: cardinality limit reached"
+            );
+            return false;
+        }
+
+        values.push(value.to_string());
+        true
+    }
+
+    /// Number of distinct values currently tracked for a label.
+    pub fn label_cardinality(&self, label: &str) -> usize {
+        self.label_values
+            .lock()
+            .expect("metrics label registry poisoned")
+            .get(label)
+            .map(|values| values.len())
+            .unwrap_or(0)
     }
 
     /// Render all metrics in Prometheus text exposition format.
