@@ -1,10 +1,12 @@
 pub mod acl;
 pub mod anomaly_detection;
+pub mod api_versioning;
 pub mod audit;
 pub mod backup_validation;
 pub mod batch_conditional_completion;
 pub mod batching;
 pub mod bulkhead;
+pub mod bulk_operations;
 pub mod cache;
 pub mod cache_partition;
 pub mod cdc_lag;
@@ -36,6 +38,14 @@ pub mod message_queue;
 pub mod metrics;
 #[cfg(test)]
 mod migration_rollback_tests;
+#[cfg(test)]
+mod response_caching_tests;
+#[cfg(test)]
+mod circuit_breaker_tests;
+#[cfg(test)]
+mod api_versioning_tests;
+#[cfg(test)]
+mod bulk_operations_tests;
 pub mod models;
 pub mod multilevel_cache;
 pub mod notifications;
